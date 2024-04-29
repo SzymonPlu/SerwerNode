@@ -1,0 +1,4 @@
+{
+  "videoSourceDirectory": "/path/to/source/videos",
+  "videoDestinationDirectory": "/path/to/destination/videos"
+}

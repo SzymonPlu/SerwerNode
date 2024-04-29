@@ -21,34 +21,43 @@ const authenticateAdmin = async (req, res, next) => {
   }
 };
 
-exports.createUser = [authenticateAdmin, async (req, res) => {
-  try {
-    console.log('Creating user');
-    const { username, password, role } = req.body;
+exports.createUser = [
+  authenticateAdmin,
+  async (req, res) => {
+    try {
+      console.log('Creating user');
+      const { username, password, role } = req.body;
 
-    // Hash the password
-    console.log('Hashing password');
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+      // Sprawdź czy rola jest jedną z dozwolonych wartości
+      const allowedRoles = ['admin', 'archiwista', 'reporter', 'kierownik produkcji'];
+      if (!allowedRoles.includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+      }
 
-    // Create a new user
-    console.log('Creating new user object');
-    const user = new User({
-      username: username,
-      password: hashedPassword,
-      role: role
-    });
+      // Hash the password
+      console.log('Hashing password');
+      const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Save the user to the database
-    console.log('Saving user to database');
-    const savedUser = await user.save();
+      // Create a new user
+      console.log('Creating new user object');
+      const user = new User({
+        username: username,
+        password: hashedPassword,
+        role: role
+      });
 
-    console.log('User created successfully');
-    res.status(201).json(savedUser);
-  } catch (error) {
-    console.error('Error in createUser:', error);
-    res.status(500).json({ error: 'Error creating user' });
+      // Save the user to the database
+      console.log('Saving user to database');
+      const savedUser = await user.save();
+
+      console.log('User created successfully');
+      res.status(201).json(savedUser);
+    } catch (error) {
+      console.error('Error in createUser:', error);
+      res.status(500).json({ error: 'Error creating user' });
+    }
   }
-}];
+];
 
 exports.login = async (req, res) => {
   try {
@@ -57,7 +66,7 @@ exports.login = async (req, res) => {
 
     // Find the user
     console.log('Finding user in database');
-    const user = await User.findOne({ username: username }); // Poprawka tutaj
+    const user = await User.findOne({ username: username });
     if (!user) {
       console.error('User not found');
       return res.status(401).json({ error: 'Incorrect username or password' });

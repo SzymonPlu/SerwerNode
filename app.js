@@ -9,6 +9,11 @@ const userController = require('./UserController');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
 const { User } = require('./User');
+const authenticateUser = require('./authenticateUser'); // Importujemy moduł authenticateUser
+const config = require('./config.json');
+
+const jwt = require('jsonwebtoken');
+const jwtSecret = '123456'; // Ustawienie tajnego klucza
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -30,7 +35,9 @@ const movieSchema = new mongoose.Schema({
   keywords: [String],
   thumbnail: String,
   duration: Number,
-  dateAdded: { type: Date, default: Date.now }
+  dateAdded: { type: Date, default: Date.now },
+  status: { type: String, default: 'niezaakceptowany' },
+  transcription: String
 });
 
 const Movie = mongoose.model('Movie', movieSchema);
@@ -54,12 +61,58 @@ app.post('/login', (req, res, next) => {
 // Obsługa rejestracji
 app.post('/signup', userController.createUser);
 
-app.get('/api/videos', async (req, res) => {
+// Trasa /api/videos z uwzględnieniem uwierzytelniania użytkownika
+app.get('/api/videos', authenticateUser, async (req, res) => {
   try {
-    const movies = await Movie.find();
+    const userRole = req.user.role; // Pobierz rolę użytkownika z uwierzytelnienia
+
+    let movies;
+    if (userRole === 'reporter') {
+      // Dla reportera zwracaj tylko filmy o statusie "niezaakceptowany"
+      movies = await Movie.find({ status: 'niezaakceptowany' });
+    } else {
+      // Dla innych użytkowników zwracaj wszystkie filmy
+      movies = await Movie.find();
+    }
+
     res.json(movies);
   } catch (error) {
     console.error(`${new Date().toISOString()} - Błąd pobierania filmów:`, error);
+    res.status(500).json({ message: error.message, stack: error.stack });
+  }
+});
+
+// Dodaj nowy endpoint PUT dla zmiany statusu filmu
+app.put('/api/videos/approve/:id', async (req, res) => {
+  const movieId = req.params.id;
+
+  try {
+    const movie = await Movie.findById(movieId);
+
+    if (!movie) {
+      return res.status(404).json({ message: 'Movie not found.' });
+    }
+
+    // Logowanie obecnego statusu filmu
+    console.log(`Current status of movie ${movieId}: "${movie.status}"`);
+
+    // Sprawdź obecny status filmu i zmień go odpowiednio
+    if (movie.status === 'niezaakceptowany') {
+      movie.status = 'do akceptacji';
+    } else if (movie.status === 'do akceptacji') {
+      movie.status = 'zaakceptowano';
+    } else if (movie.status === 'zaakceptowano') {
+      return res.status(400).json({ message: 'Movie already approved.' });
+    } else {
+      return res.status(400).json({ message: 'Invalid status.' });
+    }
+
+    const updatedMovie = await movie.save();
+
+    console.log(`${new Date().toISOString()} - Changed status to "${movie.status}" for movie:`, updatedMovie);
+    res.json(updatedMovie);
+  } catch (error) {
+    console.error(`${new Date().toISOString()} - Error updating movie status:`, error);
     res.status(500).json({ message: error.message, stack: error.stack });
   }
 });
@@ -84,6 +137,7 @@ app.post('/api/videos/add', upload.single('video'), async (req, res) => {
       keywords: keywords.split(','),
       thumbnail: thumbnail,
       duration: duration,
+      status: 'niezaakceptowany'
     });
 
     const newMovie = await movie.save();
@@ -92,6 +146,46 @@ app.post('/api/videos/add', upload.single('video'), async (req, res) => {
   } catch (error) {
     console.error(`${new Date().toISOString()} - Error saving new movie to the database:`, error);
     res.status(400).json({ message: error.message, stack: error.stack });
+  }
+});
+
+const fs = require('fs');
+
+app.put('/api/videos/transcription/:id', async (req, res) => {
+  const movieId = req.params.id;
+  const newTranscription = req.body.transcription;
+
+  try {
+    const movie = await Movie.findById(movieId);
+
+    if (!movie) {
+      return res.status(404).json({ message: 'Movie not found.' });
+    }
+
+    // Logowanie obecnej transkrypcji filmu
+    console.log(`Current transcription of movie ${movieId}: "${movie.transcription}"`);
+
+    // Aktualizacja transkrypcji filmu
+    movie.transcription = newTranscription;
+
+    const updatedMovie = await movie.save();
+
+    // Jeśli status filmu to "zaakceptowany", skopiuj plik wideo
+    if (updatedMovie.status === 'accepted') {
+      const sourcePath = path.join(config.videoSourceDirectory, movie.src);
+      const destinationPath = path.join(config.videoDestinationDirectory, movie.src);
+
+      fs.copyFile(sourcePath, destinationPath, (err) => {
+        if (err) throw err;
+        console.log(`Video was copied to ${destinationPath}`);
+      });
+    }
+
+    console.log(`${new Date().toISOString()} - Updated transcription for movie:`, updatedMovie);
+    res.json(updatedMovie);
+  } catch (error) {
+    console.error(`${new Date().toISOString()} - Error updating movie transcription:`, error);
+    res.status(500).json({ message: error.message, stack: error.stack });
   }
 });
 
