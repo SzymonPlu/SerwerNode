@@ -1,8 +1,12 @@
 const ffmpeg = require('fluent-ffmpeg');
 const path = require('path');
 
-ffmpeg.setFfmpegPath('C:\\Users\\Lenovo\\Downloads\\ffmpeg-6.1.1-full_build\\ffmpeg-6.1.1-full_build\\bin\\ffmpeg.exe');
-ffmpeg.setFfprobePath('C:\\Users\\Lenovo\\Downloads\\ffmpeg-6.1.1-full_build\\ffmpeg-6.1.1-full_build\\bin\\ffprobe.exe');
+// Ustaw ścieżkę do ffmpeg.exe
+ffmpeg.setFfmpegPath('C:\\ffmpeg\\bin\\ffmpeg.exe');
+
+// Ustaw ścieżkę do ffprobe.exe
+ffmpeg.setFfprobePath('C:\\ffmpeg\\bin\\ffprobe.exe');
+
 
 function generateThumbnail(videoPath) {
   return new Promise((resolve, reject) => {

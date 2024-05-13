@@ -133,7 +133,7 @@ app.post('/api/videos/add', upload.single('video'), async (req, res) => {
     const movie = new Movie({
       name: req.body.name,
       type: 'video',
-      src: path.join('uploads', req.file.filename), // zmienione
+      src: req.file.filename, // zmienione
       keywords: keywords.split(','),
       thumbnail: thumbnail,
       duration: duration,
@@ -142,14 +142,31 @@ app.post('/api/videos/add', upload.single('video'), async (req, res) => {
 
     const newMovie = await movie.save();
     console.log(`${new Date().toISOString()} - Saved new movie to the database:`, newMovie);
+
+    // Kopiowanie pliku wideo do nowego folderu
+    const sourcePath = path.join('uploads', newMovie.src);
+    const destinationPath = path.join('public', 'uploads', newMovie.src);
+
+    fs.copyFile(sourcePath, destinationPath, (err) => {
+      if (err) throw err;
+      console.log(`Video was copied to ${destinationPath}`);
+      
+      // Update the 'src' field with the new path
+      newMovie.src = destinationPath;
+
+      // Save the document again
+      newMovie.save((err) => {
+        if (err) throw err;
+        console.log(`Updated 'src' field for movie:`, newMovie);
+      });
+    });
+
     res.status(201).json(newMovie);
   } catch (error) {
     console.error(`${new Date().toISOString()} - Error saving new movie to the database:`, error);
     res.status(400).json({ message: error.message, stack: error.stack });
   }
 });
-
-const fs = require('fs');
 
 app.put('/api/videos/transcription/:id', async (req, res) => {
   const movieId = req.params.id;
@@ -169,17 +186,6 @@ app.put('/api/videos/transcription/:id', async (req, res) => {
     movie.transcription = newTranscription;
 
     const updatedMovie = await movie.save();
-
-    // Jeśli status filmu to "zaakceptowany", skopiuj plik wideo
-    if (updatedMovie.status === 'accepted') {
-      const sourcePath = path.join(config.videoSourceDirectory, movie.src);
-      const destinationPath = path.join(config.videoDestinationDirectory, movie.src);
-
-      fs.copyFile(sourcePath, destinationPath, (err) => {
-        if (err) throw err;
-        console.log(`Video was copied to ${destinationPath}`);
-      });
-    }
 
     console.log(`${new Date().toISOString()} - Updated transcription for movie:`, updatedMovie);
     res.json(updatedMovie);
